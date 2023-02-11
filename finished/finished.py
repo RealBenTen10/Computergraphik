@@ -52,6 +52,9 @@ class Scene:
         self.cube_position = [6,0,1],
         self.cube_eulers = [270,0,0]
 
+        self.skybox_position = [6, 0, 1],
+        self.skybox_eulers = [270, 0, 0]
+
         self.lights = [
             Light(
                 position = [
@@ -90,7 +93,6 @@ class App:
         self.window = window
         self.renderer = GraphicsEngine()
         self.scene = Scene()
-        self.lastTime = glfw.get_time()
         self.mainLoop(once)
     def mainLoop(self, once):
         running = True
@@ -134,7 +136,10 @@ class App:
 class GraphicsEngine:
     def __init__(self):
         self.wood_texture = Material("marble2.jpg")
-        self.cube_mesh = Mesh("basic_sphere.obj")
+        self.skybox_texture = Material("universe.jpg")
+        self.cube_mesh = Mesh("basic_sphere.obj", 1)
+        self.skybox_mesh = Mesh("cube.obj", 3)
+        self.sternschnuppe = Material("sternschnuppe.jpg")
         self.light_billboard = BillBoard(w = 0.2, h = 0.2)
         self.shader = self.createShader("shaders/vertex.txt", "shaders/fragment.txt")
         glClearColor(0.0, 0.0, 0.0, 1)
@@ -227,10 +232,30 @@ class GraphicsEngine:
                 vec=np.array(scene.cube_position),dtype=np.float32
             )
         )
+
+        model_transform = pyrr.matrix44.create_identity(dtype=np.float32)
+        model_transform = pyrr.matrix44.multiply(
+            m1=model_transform,
+            m2=pyrr.matrix44.create_from_eulers(
+                eulers=np.radians(scene.skybox_eulers), dtype=np.float32
+            )
+        )
+        model_transform = pyrr.matrix44.multiply(
+            m1=model_transform,
+            m2=pyrr.matrix44.create_from_translation(
+                vec=np.array(scene.skybox_position), dtype=np.float32
+            )
+        )
+
         glUniformMatrix4fv(self.modelMatrixLocation,1,GL_FALSE,model_transform)
+        self.skybox_texture.use()
+        glBindVertexArray(self.skybox_mesh.vao)
+        glDrawArrays(GL_TRIANGLES, 0, self.skybox_mesh.vertex_count)
         self.wood_texture.use()
         glBindVertexArray(self.cube_mesh.vao)
         glDrawArrays(GL_TRIANGLES, 0, self.cube_mesh.vertex_count)
+        self.sternschnuppe.use()
+
         glFlush()
     def destroy(self):
         self.cube_mesh.destroy()
@@ -238,8 +263,8 @@ class GraphicsEngine:
         self.light_billboard.destroy()
         glDeleteProgram(self.shader)
 class Mesh:
-    def __init__(self, filename):
-        self.vertices = self.loadMesh(filename)
+    def __init__(self, filename, factor):
+        self.vertices = self.loadMesh(filename, factor)
         self.vertex_count = len(self.vertices)//8
         self.vertices = np.array(self.vertices, dtype=np.float32)
         self.vao = glGenVertexArrays(1)
@@ -253,7 +278,7 @@ class Mesh:
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(12))
         glEnableVertexAttribArray(2)
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(20))
-    def loadMesh(self, filename):
+    def loadMesh(self, filename, factor):
         v = []
         vt = []
         vn = []
